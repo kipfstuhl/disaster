@@ -70,6 +70,11 @@
   :group 'disaster
   :type 'string)
 
+(defcustom disaster-fortran (or (getenv "FORTRAN") "gfortran")
+  "The command for your fortran compiler."
+  :group 'disaster
+  :type 'string)
+
 (defcustom disaster-cflags (or (getenv "CFLAGS")
                                "-march=native")
   "Command line options to use when compiling C."
@@ -79,6 +84,12 @@
 (defcustom disaster-cxxflags (or (getenv "CXXFLAGS")
                                  "-march=native")
   "Command line options to use when compiling C++.!"
+  :group 'disaster
+  :type 'string)
+
+(defcustom disaster-fortranflags (or (getenv "FORTRANFLAGS")
+				     "-march=native")
+  "Command line options to use when compiling Fortran."
   :group 'disaster
   :type 'string)
 
@@ -110,6 +121,22 @@
 
 (defvar save-place)
 
+(defcustom c-regexp "\\.c$"
+  "Regexp for C source files"
+  :group 'disaster
+  :type 'regexp)
+
+(defcustom cpp-regexp "\\.c\\(c\\|pp\\)$"
+  "Regexp for C++ source fules"
+  :group 'disaster
+  :type 'regexp)
+
+(defcustom fortran-regexp "\\.f\\(or\\|90\\|95\\|0[38]\\)?$"
+  "Regexp for Fortran source files"
+  :group 'disaster
+  :type 'regexp)
+
+
 ;;;###autoload
 (defvar disaster-find-build-root-functions nil
   "Functions to call to get the build root directory from the project directory.
@@ -140,8 +167,10 @@ is used."
          (file-line (format "%s:%d" file line))
          (makebuf (get-buffer-create disaster-buffer-compiler))
          (asmbuf (get-buffer-create disaster-buffer-assembly)))
-    (if (not (string-match "\\.c[cp]?p?$" file))
-        (message "Not C/C++ non-header file")
+    (if (not (or (string-match c-regexp file)
+		 (string-match cpp-regexp file)
+		 (string-match fortran-regexp file)))
+        (message "Not C/C++ or Fortran non-header file")
       (let* ((cwd (file-name-directory (expand-file-name (buffer-file-name))))
              (proj-root (disaster-find-project-root nil file))
 	     (make-root (disaster-find-build-root proj-root))
@@ -156,13 +185,19 @@ is used."
                        (format "make %s -C %s %s"
                                disaster-make-flags make-root
                                rel-obj))
-                   (if (string-match "\\.c[cp]p?$" file)
-                       (format "%s %s -g -c -o %s %s"
-                               disaster-cxx disaster-cxxflags
-                               (shell-quote-argument obj-file) (shell-quote-argument file))
-                     (format "%s %s -g -c -o %s %s"
-                             disaster-cc disaster-cflags
-                             (shell-quote-argument obj-file) (shell-quote-argument file)))))
+                   (cond ((string-match c-regexp file)
+			  (format "%s %s -g -c -o %s %s"
+				  disaster-cxx disaster-cxxflags
+				  (shell-quote-argument obj-file) (shell-quote-argument file)))
+			 ((string-match cpp-regexp file)
+			  (format "%s %s -g -c -o %s %s"
+				  disaster-cc disaster-cflags
+				  (shell-quote-argument obj-file) (shell-quote-argument file)))
+			 ((string-match fortran-regexp file)
+			  (format "%s %s -g -c -o %s %s"
+				  disaster-fortran disaster-fortranflags
+				  (shell-quote-argument obj-file) (shell-quote-argument file)))
+			 (t (error "This is an error")))))
              (dump (format "%s %s" disaster-objdump
 			   (shell-quote-argument (concat make-root rel-obj))))
              (line-text (buffer-substring-no-properties
